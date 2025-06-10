@@ -140,12 +140,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
                     
-                    // Register Link
-                    TextButton(
-                      onPressed: authState.isLoading ? null : () {
-                        context.go('/register');
-                      },
-                      child: const Text('Don\'t have an account? Sign Up'),
+                    // Info Text
+                    Text(
+                      'Contact your administrator for login credentials',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),

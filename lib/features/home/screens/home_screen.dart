@@ -243,6 +243,22 @@ class _StaffQuickActions extends ConsumerWidget {
             ),
           ],
         ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _QuickActionCard(
+                icon: Icons.schedule_rounded,
+                title: 'Hours Summary',
+                subtitle: 'View timesheet',
+                onTap: () => context.go('/hours'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // Empty space to balance the layout
+            const Expanded(child: SizedBox()),
+          ],
+        ),
       ],
     );
   }
