@@ -4,12 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_provider.dart';
 import 'route_animations.dart';
 import '../../features/auth/screens/login_screen.dart';
-import '../../features/auth/screens/register_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/shifts/screens/calendar_screen.dart';
 import '../../features/shifts/screens/shift_details_screen.dart';
 import '../../features/shifts/screens/create_shift_screen.dart';
 import '../../features/time_tracking/screens/clock_in_out_screen.dart';
+import '../../features/time_tracking/screens/hours_summary_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/admin/screens/admin_dashboard_screen.dart';
 import '../../features/admin/screens/shift_bookings_screen.dart';
@@ -22,8 +22,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: '/login',
     redirect: (context, state) {
       final isAuthenticated = authState.value?.session != null;
-      final isLoggingIn = state.matchedLocation == '/login' || 
-                         state.matchedLocation == '/register';
+      final isLoggingIn = state.matchedLocation == '/login';
       
       if (!isAuthenticated && !isLoggingIn) {
         return '/login';
@@ -43,14 +42,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           context,
           state,
           const LoginScreen(),
-        ),
-      ),
-      GoRoute(
-        path: '/register',
-        pageBuilder: (context, state) => RouteAnimations.slideFromRight(
-          context,
-          state,
-          const RegisterScreen(),
         ),
       ),
       
@@ -88,6 +79,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           context,
           state,
           const ClockInOutScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/hours',
+        pageBuilder: (context, state) => RouteAnimations.slideAndFade(
+          context,
+          state,
+          const HoursSummaryScreen(),
         ),
       ),
       GoRoute(

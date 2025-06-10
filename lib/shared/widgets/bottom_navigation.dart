@@ -118,6 +118,10 @@ class AppBottomNavigation extends ConsumerWidget {
           label: 'Clock',
         ),
         BottomNavigationBarItem(
+          icon: Icon(Icons.schedule_rounded),
+          label: 'Hours',
+        ),
+        BottomNavigationBarItem(
           icon: Icon(Icons.person_rounded),
           label: 'Profile',
         ),
@@ -153,6 +157,9 @@ class AppBottomNavigation extends ConsumerWidget {
           context.go('/clock');
           break;
         case 3:
+          context.go('/hours');
+          break;
+        case 4:
           context.go('/profile');
           break;
       }
@@ -211,8 +218,10 @@ class AppBottomNavigation extends ConsumerWidget {
           return 1;
         case '/clock':
           return 2;
-        case '/profile':
+        case '/hours':
           return 3;
+        case '/profile':
+          return 4;
         default:
           return 0;
       }

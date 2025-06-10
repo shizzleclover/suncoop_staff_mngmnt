@@ -83,26 +83,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<void>> {
     }
   }
 
-  Future<void> signUpWithEmail(String email, String password, String fullName) async {
-    state = const AsyncValue.loading();
-    try {
-      final response = await SupabaseService.client.auth.signUp(
-        email: email,
-        password: password,
-        data: {'full_name': fullName},
-      );
-      
-      if (response.user != null) {
-        // User profile will be created automatically via database trigger
-        state = const AsyncValue.data(null);
-      } else {
-        throw Exception('Failed to create user account');
-      }
-    } catch (error, stackTrace) {
-      state = AsyncValue.error(error, stackTrace);
-    }
-  }
-
   Future<void> signOut() async {
     state = const AsyncValue.loading();
     try {
