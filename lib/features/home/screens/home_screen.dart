@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/shift_providers.dart';
+import '../../../core/providers/time_tracking_providers.dart';
 import '../../../shared/widgets/bottom_navigation.dart';
 import '../../../shared/widgets/loading_widget.dart';
 import '../../../shared/widgets/app_sidebar.dart';
@@ -37,6 +39,9 @@ class HomeScreen extends ConsumerWidget {
           return RefreshIndicator(
             onRefresh: () async {
               ref.invalidate(currentUserProvider);
+              ref.invalidate(userBookingsProvider);
+              ref.invalidate(thisWeekSummaryProvider);
+              ref.invalidate(todayStatsProvider);
             },
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
@@ -56,15 +61,15 @@ class HomeScreen extends ConsumerWidget {
                   ] else ...[
                     _StaffQuickActions(),
                     const SizedBox(height: 16),
-                    _StaffTodayShift(),
+                    _UserShiftsSection(),
                     const SizedBox(height: 16),
-                    _StaffStatsCards(),
+                    _UserWorkSummary(),
                   ],
                   
                   const SizedBox(height: 16),
                   
-                  // Recent Activity
-                  _RecentActivity(),
+                  // Recent Activity for staff only
+                  if (!isAdmin) _UserRecentActivity(),
                 ],
               ),
             ),
@@ -355,78 +360,134 @@ class _AdminStatsCards extends StatelessWidget {
   }
 }
 
-class _StaffTodayShift extends StatelessWidget {
+// New User Shifts Section
+class _UserShiftsSection extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final now = DateTime.now();
+    final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+    final endOfWeek = startOfWeek.add(const Duration(days: 7));
+    
+    final userBookingsAsync = ref.watch(userBookingsProvider({
+      'startDate': startOfWeek,
+      'endDate': endOfWeek,
+    }));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Today\'s Shift',
+          'My Selected Shifts',
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
           ),
         ),
         const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.schedule,
-                  size: 48,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Front Desk - Morning',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
+        userBookingsAsync.when(
+          data: (bookings) {
+            if (bookings.isEmpty) {
+              return _NoDataCard(
+                icon: Icons.schedule_outlined,
+                title: 'No Shifts Selected',
+                subtitle: 'You haven\'t selected any shifts yet. Browse available shifts to get started.',
+                actionText: 'View Available Shifts',
+                onActionTap: () => context.go('/calendar'),
+              );
+            }
+            
+            return Column(
+              children: bookings.take(3).map((booking) {
+                // Note: In real implementation, you'd get shift details from booking.shift
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: _getStatusColor(booking.status).withOpacity(0.1),
+                      child: Icon(
+                        _getStatusIcon(booking.status),
+                        color: _getStatusColor(booking.status),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '9:00 AM - 5:00 PM',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Main Office',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
+                    ),
+                    title: Text(
+                      'Shift - ${_formatDate(booking.bookedAt)}',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    subtitle: Text(
+                      'Status: ${booking.status.toUpperCase()}',
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => context.go('/calendar'),
                   ),
+                );
+              }).toList(),
+            );
+          },
+          loading: () => const Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 12),
+                    Text('Loading your shifts...'),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right),
-                  onPressed: () {
-                    // TODO: Navigate to shift details
-                  },
-                ),
-              ],
+              ),
             ),
+          ),
+          error: (error, stack) => _ErrorCard(
+            message: 'Failed to load shifts',
+            onRetry: () => ref.invalidate(userBookingsProvider),
           ),
         ),
       ],
     );
   }
+
+  Color _getStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'booked':
+        return Colors.blue;
+      case 'confirmed':
+        return Colors.green;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status.toLowerCase()) {
+      case 'booked':
+        return Icons.schedule;
+      case 'confirmed':
+        return Icons.check_circle;
+      case 'cancelled':
+        return Icons.cancel;
+      default:
+        return Icons.help;
+    }
+  }
+
+  String _formatDate(DateTime date) {
+    return '${date.month}/${date.day}/${date.year}';
+  }
 }
 
-class _StaffStatsCards extends StatelessWidget {
+// New User Work Summary Section
+class _UserWorkSummary extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final thisWeekSummaryAsync = ref.watch(thisWeekSummaryProvider);
+    final todayStatsAsync = ref.watch(todayStatsProvider);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'This Week',
+          'Work Summary',
           style: Theme.of(context).textTheme.titleLarge?.copyWith(
             fontWeight: FontWeight.bold,
           ),
@@ -435,23 +496,66 @@ class _StaffStatsCards extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: _StatCard(
-                title: 'Hours Worked',
-                value: '32.5',
-                icon: Icons.access_time,
-                color: Colors.orange,
+              child: thisWeekSummaryAsync.when(
+                data: (summary) => _StatCard(
+                  title: 'This Week',
+                  value: '${summary.totalHours.toStringAsFixed(1)}h',
+                  icon: Icons.access_time,
+                  color: Colors.orange,
+                ),
+                loading: () => _LoadingStatCard(
+                  title: 'This Week',
+                  icon: Icons.access_time,
+                  color: Colors.orange,
+                ),
+                error: (error, stack) => _StatCard(
+                  title: 'This Week',
+                  value: 'Error',
+                  icon: Icons.error_outline,
+                  color: Colors.red,
+                ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _StatCard(
-                title: 'Shifts Completed',
-                value: '4',
-                icon: Icons.check_circle_outline,
-                color: Colors.green,
+              child: todayStatsAsync.when(
+                data: (stats) => _StatCard(
+                  title: 'Today',
+                  value: '${stats['hoursWorkedToday']?.toStringAsFixed(1) ?? '0.0'}h',
+                  icon: Icons.today,
+                  color: Colors.green,
+                ),
+                loading: () => _LoadingStatCard(
+                  title: 'Today',
+                  icon: Icons.today,
+                  color: Colors.green,
+                ),
+                error: (error, stack) => _StatCard(
+                  title: 'Today',
+                  value: 'Error',
+                  icon: Icons.error_outline,
+                  color: Colors.red,
+                ),
               ),
             ),
           ],
+        ),
+        const SizedBox(height: 12),
+        thisWeekSummaryAsync.when(
+          data: (summary) {
+            if (summary.totalHours == 0) {
+              return _NoDataCard(
+                icon: Icons.access_time_outlined,
+                title: 'No Work Hours Yet',
+                subtitle: 'You haven\'t clocked any hours this week. Start by clocking in to track your work time.',
+                actionText: 'Clock In Now',
+                onActionTap: () => context.go('/clock'),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+          loading: () => const SizedBox.shrink(),
+          error: (error, stack) => const SizedBox.shrink(),
         ),
       ],
     );
@@ -507,9 +611,154 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-class _RecentActivity extends StatelessWidget {
+class _LoadingStatCard extends StatelessWidget {
+  const _LoadingStatCard({
+    required this.title,
+    required this.icon,
+    required this.color,
+  });
+
+  final String title;
+  final IconData icon;
+  final Color color;
+
   @override
   Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, color: color, size: 24),
+                const Spacer(),
+              ],
+            ),
+            const SizedBox(height: 12),
+            const SizedBox(
+              width: 40,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NoDataCard extends StatelessWidget {
+  const _NoDataCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.actionText,
+    required this.onActionTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String actionText;
+  final VoidCallback onActionTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              size: 48,
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              subtitle,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: onActionTap,
+              icon: const Icon(Icons.arrow_forward),
+              label: Text(actionText),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ErrorCard extends StatelessWidget {
+  const _ErrorCard({
+    required this.message,
+    required this.onRetry,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.error_outline,
+              size: 48,
+              color: Colors.red,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              style: Theme.of(context).textTheme.titleMedium,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UserRecentActivity extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final clockRecordsAsync = ref.watch(clockRecordsProvider({
+      'limit': 5,
+    }));
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -520,37 +769,70 @@ class _RecentActivity extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        Card(
-          child: Column(
-            children: [
-              _ActivityItem(
-                icon: Icons.access_time,
-                title: 'Clocked in',
-                subtitle: 'Front Desk shift',
-                time: '9:00 AM',
-                color: Colors.green,
+        clockRecordsAsync.when(
+          data: (records) {
+            if (records.isEmpty) {
+              return _NoDataCard(
+                icon: Icons.history_outlined,
+                title: 'No Activity Yet',
+                subtitle: 'Your recent clock in/out activities will appear here.',
+                actionText: 'Start Working',
+                onActionTap: () => context.go('/clock'),
+              );
+            }
+            
+            return Card(
+              child: Column(
+                children: records.map((record) {
+                  return _ActivityItem(
+                    icon: record.clockOutTime != null ? Icons.check_circle : Icons.access_time,
+                    title: record.clockOutTime != null ? 'Clocked out' : 'Clocked in',
+                    subtitle: record.clockOutTime != null 
+                        ? 'Worked ${record.totalHours?.toStringAsFixed(1) ?? '0.0'} hours'
+                        : 'Currently working',
+                    time: _formatTime(record.clockInTime),
+                    color: record.clockOutTime != null ? Colors.green : Colors.orange,
+                  );
+                }).toList(),
               ),
-              const Divider(height: 1),
-              _ActivityItem(
-                icon: Icons.schedule,
-                title: 'Shift assigned',
-                subtitle: 'Evening shift tomorrow',
-                time: 'Yesterday',
-                color: Colors.blue,
+            );
+          },
+          loading: () => const Card(
+            child: Padding(
+              padding: EdgeInsets.all(24),
+              child: Center(
+                child: Column(
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 12),
+                    Text('Loading recent activity...'),
+                  ],
+                ),
               ),
-              const Divider(height: 1),
-              _ActivityItem(
-                icon: Icons.check_circle,
-                title: 'Shift completed',
-                subtitle: 'Morning shift',
-                time: '2 days ago',
-                color: Colors.orange,
-              ),
-            ],
+            ),
+          ),
+          error: (error, stack) => _ErrorCard(
+            message: 'Failed to load recent activity',
+            onRetry: () => ref.invalidate(clockRecordsProvider),
           ),
         ),
       ],
     );
+  }
+
+  String _formatTime(DateTime dateTime) {
+    final now = DateTime.now();
+    final difference = now.difference(dateTime);
+    
+    if (difference.inDays > 0) {
+      return '${difference.inDays} days ago';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours} hours ago';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes} minutes ago';
+    } else {
+      return 'Just now';
+    }
   }
 }
 

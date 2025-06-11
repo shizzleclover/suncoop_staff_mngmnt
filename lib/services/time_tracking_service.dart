@@ -83,7 +83,7 @@ class TimeTrackingService {
       final response = await SupabaseService.from(AppConstants.clockRecordsTable)
           .select()
           .eq('user_id', SupabaseService.currentUserId!)
-          .is_('clock_out_time', null)
+          .isFilter('clock_out_time', null)
           .order('clock_in_time', ascending: false)
           .limit(1)
           .maybeSingle();
@@ -122,11 +122,14 @@ class TimeTrackingService {
       if (endDate != null) {
         query = query.lte('clock_in_time', endDate.toIso8601String());
       }
+
+      var orderedQuery = query.order('clock_in_time', ascending: false);
+      
       if (limit != null) {
-        query = query.limit(limit);
+        orderedQuery = orderedQuery.limit(limit);
       }
 
-      final response = await query.order('clock_in_time', ascending: false);
+      final response = await orderedQuery;
       
       return response.map<ClockRecordModel>((data) => ClockRecordModel.fromJson(data)).toList();
     } catch (e) {
@@ -268,7 +271,7 @@ class TimeTrackingService {
             )
           ''')
           .eq('status', AppConstants.clockStatusIn)
-          .is_('clock_out_time', null);
+          .isFilter('clock_out_time', null);
 
       return response.map((data) {
         final record = ClockRecordModel.fromJson(data);
